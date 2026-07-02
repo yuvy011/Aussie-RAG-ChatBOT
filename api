@@ -1,1 +1,34 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+from src.pipeline import answer_question
+
+app = FastAPI(title="Aussie RAG Bot", version="0.1.0")
+
+
+class QueryRequest(BaseModel):
+    query: str
+    top_k: int = 5
+    ticker: str | None = None  # optional metadata filter
+
+
+class QueryResponse(BaseModel):
+    answer: str
+    sources: list[dict]
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.post("/query", response_model=QueryResponse)
+def query(request: QueryRequest):
+    where = {"ticker": request.ticker} if request.ticker else None
+    result = answer_question(request.query, top_k=request.top_k, where=where)
+
+    return QueryResponse(
+        answer=result["answer"],
+        sources=[c["metadata"] for c in result["retrieved_chunks"]],
+    )
 
