@@ -1,1 +1,70 @@
 
+"""
+Fetch Australian news via RSS feeds and save raw output to data/raw/.
+
+Usage:
+    python data/ingest/fetch_news.py
+
+NOTE: Verify each feed URL still works before relying on it - RSS endpoints
+change or get deprecated. This is a starting list of commonly available AU feeds.
+"""
+import json
+from datetime import datetime
+from pathlib import Path
+
+import feedparser
+
+# Starting set of AU news RSS feeds - expand/replace as needed
+DEFAULT_FEEDS = {
+    "abc_business": "https://www.abc.net.au/news/feed/51892/rss.xml",
+    "afr_companies": "https://www.afr.com/rss/companies",
+    # ASX company announcements are gold for a finance RAG bot -
+    # check ASX's current announcement feed format before enabling.
+}
+
+RAW_DIR = Path(__file__).resolve().parents[2] / "data" / "raw"
+
+
+def fetch_feed(name: str, url: str) -> list[dict]:
+    """Parse a single RSS feed into a list of article dicts."""
+    parsed = feedparser.parse(url)
+    articles = []
+
+    for entry in parsed.entries:
+        articles.append(
+            {
+                "source": name,
+                "title": entry.get("title"),
+                "link": entry.get("link"),
+                "published": entry.get("published", entry.get("updated")),
+                "summary": entry.get("summary"),
+                "fetched_at": datetime.utcnow().isoformat(),
+            }
+        )
+
+    return articles
+
+
+def main(feeds=None):
+    feeds = feeds or DEFAULT_FEEDS
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+
+    all_articles = []
+    for name, url in feeds.items():
+        print(f"Fetching feed: {name}...")
+        try:
+            articles = fetch_feed(name, url)
+        except Exception as e:
+            print(f"  Failed to fetch {name}: {e}")
+            continue
+
+        print(f"  Got {len(articles)} articles")
+        all_articles.extend(articles)
+
+    out_path = RAW_DIR / "news_articles.json"
+    out_path.write_text(json.dumps(all_articles, indent=2))
+    print(f"Saved {len(all_articles)} total articles to {out_path}")
+
+
+if __name__ == "__main__":
+    main()
